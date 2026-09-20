@@ -852,6 +852,18 @@
     return 'ABCDEFGH'[i];
   }
 
+  // 一題可以有多個正確答案（例如 A 和 D 都算對）：answerIndexes 是全部正確選項的索引
+  function answerList(q){
+    if(q && Array.isArray(q.answerIndexes) && q.answerIndexes.length) return q.answerIndexes;
+    return (q && q.answerIndex >= 0) ? [q.answerIndex] : [];
+  }
+  function isAnsIdx(q, i){ return answerList(q).indexOf(i) !== -1; }
+  function answerLabelText(q){
+    var list = answerList(q);
+    var t = list.map(function(i){ return optionLabel(q, i); }).join('、');
+    return list.length > 1 ? (t + '（任一個皆可）') : t;
+  }
+
   function render(){
     var total = gq().length;
     updateGroupBar();
@@ -890,7 +902,7 @@
         var tag = q.source === 'cloud' ? '・雲端題庫' : '・本機新增';
         var rec = state.records[q.id];
         var recTag = rec ? ('・' + (rec.lastResult === 'wrong' ? '尚未答對' : '已答對')) : '';
-        var typeInfo = q.type === 'fill' ? ('填充題・答案「' + escapeHtml(q.answerText) + '」') : (q.options.length + ' 個選項・答案 ' + optionLabel(q, q.answerIndex));
+        var typeInfo = q.type === 'fill' ? ('填充題・答案「' + escapeHtml(q.answerText) + '」') : (q.options.length + ' 個選項・答案 ' + answerLabelText(q));
         row.innerHTML = '<div><div class="qtext">' + (i+1) + '. [' + escapeHtml(getCatOf(q)) + '] ' + escapeHtml(q.text) + '</div>' +
           '<div class="qmeta">' + typeInfo + tag + recTag + '</div></div>';
         qlist.appendChild(row);
@@ -927,6 +939,7 @@
             }else{
               base.options = q.options;
               base.answerIndex = q.answerIndex;
+              base.answerIndexes = Array.isArray(q.answerIndexes) && q.answerIndexes.length ? q.answerIndexes : [q.answerIndex];
               base.optionStyle = q.optionStyle || 'letter';
             }
             return base;
@@ -1184,7 +1197,7 @@
       return '<div class="display-answer-box">（尚未顯示答案）</div>';
     }
     return q.options.map(function(opt, i){
-      var isCorrect = revealed && i === q.answerIndex;
+      var isCorrect = revealed && isAnsIdx(q, i);
       if(plain){
         var style = isCorrect ? 'color:#16305C;font-weight:700;text-decoration:underline;' : '';
         return '<div style="' + style + 'margin-bottom:4px;font-size:17px;">(' + optionLabel(q, i) + ') ' + renderTextWithImages(opt) + '</div>';
@@ -1287,18 +1300,19 @@
     var i = parseInt(opt.getAttribute('data-i'), 10);
     var q = quiz.order[quiz.idx];
     quiz.answers[quiz.idx] = i;
-    var isRight = i === q.answerIndex;
+    var isRight = isAnsIdx(q, i);
     if(isRight) quiz.correctCount++;
     document.querySelectorAll('.option').forEach(function(el, ei){
-      if(ei === q.answerIndex) el.classList.add('correct');
+      if(isAnsIdx(q, ei)) el.classList.add('correct');
       if(ei === i && !isRight) el.classList.add('wrong');
       if(ei === i) el.classList.add('selected');
     });
     var fb = document.getElementById('feedback');
     fb.className = 'feedback show ' + (isRight ? 'right' : 'wrong');
-    fb.textContent = isRight ? '答對了。' : ('答錯了，正確答案是 ' + optionLabel(q, q.answerIndex) + '。');
+    fb.textContent = isRight ? '答對了。' : ('答錯了，正確答案是 ' + answerLabelText(q) + '。');
     document.getElementById('nextBtn').disabled = false;
-    if(isRight){ setTimeout(advanceQuiz, 200); }
+    // 有多個正確答案時，多停留一下，讓使用者看到所有正確選項
+    if(isRight){ setTimeout(advanceQuiz, answerList(q).length > 1 ? 800 : 200); }
   });
 
   document.getElementById('fillSubmitBtn').addEventListener('click', function(){
@@ -1338,7 +1352,7 @@
 
   function isAnswerRight(q, userAns){
     if(q.type === 'fill') return normalizeAnswer(userAns) === normalizeAnswer(q.answerText);
-    return userAns === q.answerIndex;
+    return isAnsIdx(q, userAns);
   }
 
   function finishQuiz(){
@@ -1379,7 +1393,7 @@
         row.className = 'qlist-item';
         var metaText = q.type === 'fill'
           ? ('你的答案「' + escapeHtml(quiz.answers[i] || '') + '」　正確答案「' + renderTextWithImages(q.answerText) + '」')
-          : ('你的答案 ' + optionLabel(q, quiz.answers[i]) + '　正確答案 ' + optionLabel(q, q.answerIndex));
+          : ('你的答案 ' + optionLabel(q, quiz.answers[i]) + '　正確答案 ' + answerLabelText(q));
         row.innerHTML = '<div><div class="qtext">' + escapeHtml(q.text) + '</div>' +
           '<div class="qmeta">' + metaText + '</div></div>';
         wrongList.appendChild(row);
