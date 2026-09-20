@@ -779,32 +779,83 @@
     });
   }
 
+  var SUBJECT_ORDER = ['基礎醫學','基本護理學','內外科護理學','產兒科護理學','精神科與社區衛生護理學'];
+  var navYear = null;
+  function parseExamCat(name){
+    var m = String(name).match(/^\s*(\d+)\s*-\s*(\d+)\s*(.*)$/);
+    return m ? {year:+m[1], exam:+m[2], subject:m[3].trim()} : null;
+  }
+  function subjectRank(s){
+    var i = SUBJECT_ORDER.indexOf(s);
+    return i === -1 ? 999 : i;
+  }
+  function catRowHtml(name, label, count, sel){
+    return '<label class="cat-row"><input type="checkbox" data-cat="' + escapeHtml(name) + '" ' + (isCatSelected(sel, name) ? 'checked' : '') + '>' +
+      '<span class="cat-name">' + escapeHtml(label) + '</span>' +
+      '<span class="cat-count">' + count + ' 題</span></label>';
+  }
+
   function renderCategories(){
     var cats = {};
     gq().forEach(function(q){
       var c = getCatOf(q);
       cats[c] = (cats[c] || 0) + 1;
     });
-    var names = Object.keys(cats).sort();
+    var names = Object.keys(cats);
     var catCard = document.getElementById('catCard');
     var catList = document.getElementById('catList');
-    if(names.length <= 1){
+    if(names.length === 0 || (names.length === 1 && !parseExamCat(names[0]))){
       catCard.style.display = 'none';
       return;
     }
     catCard.style.display = 'block';
     var sel = loadCatSelection();
-    catList.innerHTML = '';
-    names.forEach(function(name){
-      var checked = isCatSelected(sel, name);
-      var row = document.createElement('label');
-      row.className = 'cat-row';
-      row.innerHTML = '<input type="checkbox" data-cat="' + escapeHtml(name) + '" ' + (checked ? 'checked' : '') + '>' +
-        '<span class="cat-name">' + escapeHtml(name) + '</span>' +
-        '<span class="cat-count">' + cats[name] + ' 題</span>';
-      catList.appendChild(row);
+    var exams = [], others = [];
+    names.forEach(function(n){
+      var p = parseExamCat(n);
+      if(p){ p.name = n; exams.push(p); } else others.push(n);
     });
+    others.sort();
+    var html = '';
+    if(exams.length){
+      var years = [];
+      exams.forEach(function(e){ if(years.indexOf(e.year) === -1) years.push(e.year); });
+      years.sort(function(x,y){ return y - x; });
+      if(navYear === null || years.indexOf(navYear) === -1) navYear = years[0];
+      html += '<div class="year-row" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">';
+      years.forEach(function(y){
+        var on = y === navYear;
+        html += '<button type="button" class="year-btn" data-year="' + y + '" style="padding:8px 16px;border-radius:999px;border:1px solid #8b1a1a;font-size:16px;cursor:pointer;' +
+          (on ? 'background:#8b1a1a;color:#fff;' : 'background:#fff;color:#8b1a1a;') + '">' + y + '</button>';
+      });
+      html += '</div>';
+      var byExam = {};
+      exams.filter(function(e){ return e.year === navYear; }).forEach(function(e){
+        (byExam[e.exam] = byExam[e.exam] || []).push(e);
+      });
+      Object.keys(byExam).map(Number).sort(function(x,y){ return x - y; }).forEach(function(n){
+        var list = byExam[n].sort(function(x,y){
+          return subjectRank(x.subject) - subjectRank(y.subject) || x.subject.localeCompare(y.subject);
+        });
+        html += '<div style="font-weight:700;margin:10px 0 2px;">' + navYear + '-' + n + '</div>';
+        list.forEach(function(e){
+          html += catRowHtml(e.name, e.subject || (e.year + '-' + e.exam), cats[e.name], sel);
+        });
+      });
+    }
+    if(others.length){
+      if(exams.length) html += '<div style="font-weight:700;margin:10px 0 2px;">其他</div>';
+      others.forEach(function(n){ html += catRowHtml(n, n, cats[n], sel); });
+    }
+    catList.innerHTML = html;
   }
+
+  document.getElementById('catList').addEventListener('click', function(e){
+    var yb = e.target.closest('.year-btn');
+    if(!yb) return;
+    navYear = +yb.getAttribute('data-year');
+    renderCategories();
+  });
 
   document.getElementById('catList').addEventListener('change', function(e){
     var cb = e.target.closest('input[type=checkbox]');
