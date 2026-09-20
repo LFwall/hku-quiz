@@ -657,7 +657,7 @@
   var LS_GROUP = 'quizAppGroup';
   var currentGroup = '';
 
-  function getGroupOf(q){ return q.group || '群組一'; }
+  function getGroupOf(q){ return q.group || '弘光考試'; }
 
   function loadGroup(){
     try{ currentGroup = localStorage.getItem(LS_GROUP) || ''; }catch(e){ currentGroup = ''; }
@@ -921,7 +921,7 @@
       .then(function(data){
         if(data && data.success && Array.isArray(data.questions)){
           var cloudQs = data.questions.map(function(q){
-            var base = { id: 'cloud_' + q.id, text: q.text, type: q.type || 'choice', source: 'cloud', category: q.category || '未分類', group: q.group || '群組一' };
+            var base = { id: 'cloud_' + q.id, text: q.text, type: q.type || 'choice', source: 'cloud', category: q.category || '未分類', group: q.group || '弘光考試' };
             if(base.type === 'fill'){
               base.answerText = q.answerText;
             }else{
