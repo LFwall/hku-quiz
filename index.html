@@ -768,14 +768,19 @@
   }
 
   function isCatSelected(sel, cat){
-    return sel.hasOwnProperty(cat) ? !!sel[cat] : true;
+    return sel.hasOwnProperty(cat) ? !!sel[cat] : false;
   }
 
   function filterByCategory(list){
     var sel = loadCatSelection();
+    var seen = {};
+    gq().forEach(function(q){ seen[getCatOf(q)] = 1; });
+    var seenNames = Object.keys(seen);
+    // 分類清單卡片被隱藏（只有一個一般分類）時，沒有地方可勾選，直接全部納入
+    var noPicker = seenNames.length === 0 || (seenNames.length === 1 && !parseExamCat(seenNames[0]));
     return list.filter(function(q){
       if(currentGroup && getGroupOf(q) !== currentGroup) return false;
-      return isCatSelected(sel, getCatOf(q));
+      return noPicker || isCatSelected(sel, getCatOf(q));
     });
   }
 
@@ -821,7 +826,12 @@
       var years = [];
       exams.forEach(function(e){ if(years.indexOf(e.year) === -1) years.push(e.year); });
       years.sort(function(x,y){ return y - x; });
-      if(navYear === null || years.indexOf(navYear) === -1) navYear = years[0];
+      if(navYear === null || years.indexOf(navYear) === -1){
+        navYear = years[0];
+        for(var k = 0; k < exams.length; k++){
+          if(isCatSelected(sel, exams[k].name)){ navYear = exams[k].year; break; }
+        }
+      }
       html += '<div class="year-row" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">';
       years.forEach(function(y){
         var on = y === navYear;
@@ -854,7 +864,14 @@
     var yb = e.target.closest('.year-btn');
     if(!yb) return;
     navYear = +yb.getAttribute('data-year');
-    renderCategories();
+    // 切換年份：其他年份已勾選的題庫自動取消勾選
+    var sel = loadCatSelection();
+    Object.keys(sel).forEach(function(name){
+      var p = parseExamCat(name);
+      if(p && p.year !== navYear) sel[name] = false;
+    });
+    saveCatSelection(sel);
+    render();
   });
 
   document.getElementById('catList').addEventListener('change', function(e){
