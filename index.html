@@ -324,6 +324,7 @@
     color:#7A1E1E;
     line-height:1;
     display:block;
+    white-space:nowrap;
   }
   .score-underline{
     height:5px;
@@ -388,7 +389,7 @@
     font-size:15px;color:var(--ink-soft);
   }
   .display-answer-box.revealed{background:var(--correct-bg);border-color:var(--correct);color:var(--correct);font-weight:700;}
-  .display-hint{font-size:12px;color:var(--ink-soft);text-align:center;margin-top:6px;}
+  .display-hint{font-size:20px;font-weight:700;color:var(--ink-soft);text-align:center;margin:14px 0 24px;}
   .display-plain-item{padding:0;margin-bottom:4px;}
   .guide-card{
     background:var(--paper-2);border:1px solid var(--line);border-radius:4px;
@@ -413,6 +414,12 @@
   }
   .cat-row .cat-name{flex:1;}
   .cat-row .cat-count{font-size:12px;color:var(--ink-soft);}
+  .group-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:14px;}
+  .group-bar b{color:var(--accent);}
+  .group-bar button{padding:6px 12px;border:1px solid var(--line-strong);border-radius:4px;background:transparent;color:var(--ink);font-size:13px;}
+  .group-btn{width:100%;display:flex;justify-content:space-between;align-items:center;padding:14px;border-radius:4px;border:1px solid var(--line-strong);background:var(--paper);margin-bottom:8px;font-size:16px;text-align:left;color:var(--ink);}
+  .group-btn.current{border-color:var(--ink);font-weight:700;}
+  .group-btn .cnt{font-size:12px;color:var(--ink-soft);}
 </style>
 </head>
 <body>
@@ -446,6 +453,10 @@
       <button class="btn" id="addHomeBtn" style="display:none;background:var(--accent);border-color:var(--accent);font-size:16px;padding:16px;">
         📲 把 App 加到主畫面，開起來更方便
       </button>
+      <div class="group-bar" id="groupBar" style="display:none;">
+        <span>目前群組：<b id="groupName"></b></span>
+        <button id="switchGroupBtn">切換群組</button>
+      </div>
       <div class="card">
         <p class="card-title">開始練習</p>
         <p class="card-sub" id="homeSub">目前題庫沒有題目，先去「題庫」匯入吧。</p>
@@ -462,6 +473,15 @@
       <button class="btn" id="startAllBtn" disabled>開始練習</button>
       <button class="btn secondary" id="viewAccuracyBtn" disabled>查看題目答題率</button>
       <button class="btn secondary" id="startDisplayBtn" disabled>顯示題目</button>
+    </div>
+
+    <div class="screen" id="screen-group">
+      <div class="card">
+        <p class="card-title">選擇你的群組</p>
+        <p class="card-sub">選好之後，下次打開會自動進入這個群組，之後也可以在首頁切換。</p>
+        <div id="groupList" style="margin-top:14px;"></div>
+      </div>
+      <button class="btn secondary" id="groupCancelBtn" style="display:none;">取消</button>
     </div>
 
     <div class="screen" id="screen-accuracy">
@@ -582,7 +602,6 @@
             <div class="score-underline score-underline-1"></div>
             <div class="score-underline score-underline-2"></div>
           </div>
-          <div class="lab" id="resultFraction">答對 0 / 0 題</div>
         </div>
       </div>
       <div class="card" id="wrongCard" style="display:none;">
@@ -635,16 +654,95 @@
   }
 
   var LS_CATS = 'quizAppCatSelection';
+  var LS_GROUP = 'quizAppGroup';
+  var currentGroup = '';
+
+  function getGroupOf(q){ return q.group || '群組一'; }
+
+  function loadGroup(){
+    try{ currentGroup = localStorage.getItem(LS_GROUP) || ''; }catch(e){ currentGroup = ''; }
+  }
+
+  // 目前群組內的題目（尚未選定群組時回傳全部）
+  function gq(){
+    if(!currentGroup) return state.questions;
+    return state.questions.filter(function(q){ return getGroupOf(q) === currentGroup; });
+  }
+
+  function groupCounts(){
+    var counts = {};
+    state.questions.forEach(function(q){
+      var g = getGroupOf(q);
+      counts[g] = (counts[g] || 0) + 1;
+    });
+    return counts;
+  }
+
+  function groupNames(){ return Object.keys(groupCounts()).sort(); }
+
+  function activeScreenId(){
+    var a = document.querySelector('.screen.active');
+    return a ? a.id : '';
+  }
+
+  function updateGroupBar(){
+    var bar = document.getElementById('groupBar');
+    if(!bar) return;
+    if(currentGroup && groupNames().length > 1){
+      document.getElementById('groupName').textContent = currentGroup;
+      bar.style.display = 'flex';
+    }else{
+      bar.style.display = 'none';
+    }
+  }
+
+  function chooseGroup(name, silent){
+    currentGroup = name;
+    try{ localStorage.setItem(LS_GROUP, name); }catch(e){}
+    render();
+    if(!silent){
+      setHeaderCatTag('');
+      show('home');
+    }
+  }
+
+  function openGroupPicker(cancelable){
+    var counts = groupCounts();
+    var list = document.getElementById('groupList');
+    list.innerHTML = '';
+    Object.keys(counts).sort().forEach(function(name){
+      var btn = document.createElement('button');
+      btn.className = 'group-btn' + (name === currentGroup ? ' current' : '');
+      btn.innerHTML = '<span>' + escapeHtml(name) + '</span><span class="cnt">' + counts[name] + ' 題</span>';
+      btn.addEventListener('click', function(){ chooseGroup(name, false); });
+      list.appendChild(btn);
+    });
+    document.getElementById('groupCancelBtn').style.display = cancelable ? 'block' : 'none';
+    show('group');
+  }
+
+  // 確認目前記住的群組還存在；沒有記錄或已不存在時，只有一個群組就自動選，多個就跳出選單
+  function ensureGroup(){
+    var names = groupNames();
+    if(names.length === 0){ updateGroupBar(); return; }
+    if(currentGroup && names.indexOf(currentGroup) !== -1){ updateGroupBar(); return; }
+    currentGroup = '';
+    try{ localStorage.removeItem(LS_GROUP); }catch(e){}
+    if(names.length === 1){ chooseGroup(names[0], true); return; }
+    var sid = activeScreenId();
+    if(sid === 'screen-home' || sid === 'screen-group'){ openGroupPicker(false); }
+    else{ render(); }
+  }
 
   function stillWrongQuestions(){
-    return state.questions.filter(function(q){
+    return gq().filter(function(q){
       var r = state.records[q.id];
       return r && r.lastResult === 'wrong';
     });
   }
 
   function everWrongQuestions(){
-    return state.questions.filter(function(q){
+    return gq().filter(function(q){
       var r = state.records[q.id];
       return r && r.wrongCount > 0;
     });
@@ -675,12 +773,15 @@
 
   function filterByCategory(list){
     var sel = loadCatSelection();
-    return list.filter(function(q){ return isCatSelected(sel, getCatOf(q)); });
+    return list.filter(function(q){
+      if(currentGroup && getGroupOf(q) !== currentGroup) return false;
+      return isCatSelected(sel, getCatOf(q));
+    });
   }
 
   function renderCategories(){
     var cats = {};
-    state.questions.forEach(function(q){
+    gq().forEach(function(q){
       var c = getCatOf(q);
       cats[c] = (cats[c] || 0) + 1;
     });
@@ -752,11 +853,12 @@
   }
 
   function render(){
-    var total = state.questions.length;
+    var total = gq().length;
+    updateGroupBar();
     document.getElementById('bankCount').textContent = total + ' 題';
     document.getElementById('statTotal').textContent = total;
     renderCategories();
-    var filteredAll = filterByCategory(state.questions);
+    var filteredAll = filterByCategory(gq());
     document.getElementById('startAllBtn').disabled = filteredAll.length === 0;
     document.getElementById('startAllBtn').textContent = '開始練習（' + filteredAll.length + ' 題）';
     document.getElementById('startDisplayBtn').disabled = filteredAll.length === 0;
@@ -781,7 +883,7 @@
     if(total === 0){
       qlist.innerHTML = '<div class="empty">還沒有題目</div>';
     }else{
-      state.questions.forEach(function(q, i){
+      gq().forEach(function(q, i){
         var row = document.createElement('div');
         row.className = 'qlist-item';
         var letters = 'ABCDEFGH';
@@ -819,7 +921,7 @@
       .then(function(data){
         if(data && data.success && Array.isArray(data.questions)){
           var cloudQs = data.questions.map(function(q){
-            var base = { id: 'cloud_' + q.id, text: q.text, type: q.type || 'choice', source: 'cloud', category: q.category || '未分類' };
+            var base = { id: 'cloud_' + q.id, text: q.text, type: q.type || 'choice', source: 'cloud', category: q.category || '未分類', group: q.group || '群組一' };
             if(base.type === 'fill'){
               base.answerText = q.answerText;
             }else{
@@ -836,6 +938,7 @@
           }
           saveBank();
           render();
+          ensureGroup();
           updateCloudSub();
           if(!silent && msg){ msg.className = 'msg show ok'; msg.textContent = '已同步 ' + cloudQs.length + ' 題雲端題目'; }
         }else{
@@ -873,6 +976,9 @@
       });
   }
 
+  document.getElementById('switchGroupBtn').addEventListener('click', function(){ openGroupPicker(true); });
+  document.getElementById('groupCancelBtn').addEventListener('click', function(){ show('home'); });
+
   document.getElementById('syncBtn').addEventListener('click', function(){ checkVersionAndMaybeSync(false); });
 
   document.getElementById('actBtn').addEventListener('click', function(){
@@ -900,11 +1006,13 @@
         if(data && data.success){
           markActivated(data.token);
           var tb0 = document.getElementById('tabbar'); if(tb0) tb0.classList.remove('hidden');
+          loadGroup();
           loadBank();
           render();
           updateCloudSub();
           checkVersionAndMaybeSync(true);
           show('home');
+          ensureGroup();
         }else{
           var reason = data && data.reason;
           if(reason === 'used'){ err.textContent = '這組序號已經被使用過了。'; }
@@ -1103,17 +1211,28 @@
         buildAnswerHtml(q, displayRevealed) +
       '</div>' +
       '<p class="display-hint">' + hint + '</p>';
-    document.getElementById('displayCard').addEventListener('click', function(){
-      if(showAnswerPref === 'hide' && !displayRevealed){
-        displayRevealed = true;
-        renderDisplaySingle();
-      }else{
-        displayIdx++;
-        displayRevealed = (showAnswerPref === 'show');
-        renderDisplaySingle();
-      }
-    });
   }
+
+  function advanceDisplay(){
+    if(showAnswerPref === 'hide' && !displayRevealed){
+      displayRevealed = true;
+      renderDisplaySingle();
+    }else{
+      displayIdx++;
+      displayRevealed = (showAnswerPref === 'show');
+      renderDisplaySingle();
+    }
+  }
+
+  // 單題顯示：點「回首頁」按鈕下方畫面的任何位置都可以切換（不只題目框內）
+  document.addEventListener('click', function(e){
+    var scr = document.getElementById('screen-display');
+    if(!scr || !scr.classList.contains('active') || displayMode !== 'single') return;
+    if(e.target.closest && e.target.closest('button, a, input, textarea, select, label')) return;
+    var btn = document.getElementById('closeDisplayBtn');
+    if(e.clientY <= btn.getBoundingClientRect().bottom) return;
+    advanceDisplay();
+  });
 
   function renderDisplayList(){
     var area = document.getElementById('displayListArea');
@@ -1238,7 +1357,7 @@
     saveBank();
 
     var pct = Math.round(quiz.correctCount / quiz.order.length * 100);
-    document.getElementById('resultScoreHand').textContent = pct;
+    document.getElementById('resultScoreHand').textContent = '答對 ' + quiz.correctCount + ' / ' + quiz.order.length + ' 題';
     var perfect = quiz.order.length > 0 && quiz.correctCount === quiz.order.length;
     var pfBox = document.getElementById('perfectBox');
     pfBox.classList.remove('play');
@@ -1248,7 +1367,6 @@
       void pfBox.offsetWidth;
       pfBox.classList.add('play');
     }
-    document.getElementById('resultFraction').textContent = '答對 ' + quiz.correctCount + ' / ' + quiz.order.length + ' 題';
 
     var wrongList = document.getElementById('wrongList');
     var wrongCard = document.getElementById('wrongCard');
@@ -1271,6 +1389,18 @@
     document.getElementById('viewWrongBtn').style.opacity = wrongIds.length === 0 ? '0.4' : '1';
     render();
     show('result');
+    fitScoreText();
+  }
+
+  function fitScoreText(){
+    var h = document.getElementById('resultScoreHand');
+    if(!h) return;
+    h.style.fontSize = '';
+    var card = h.closest('.card');
+    var avail = (card ? card.clientWidth : 320) - 50;
+    if(h.scrollWidth > avail && avail > 0){
+      h.style.fontSize = Math.max(28, Math.floor(88 * avail / h.scrollWidth)) + 'px';
+    }
   }
 
   document.getElementById('viewWrongBtn').addEventListener('click', function(){
@@ -1288,11 +1418,13 @@
 
   if(isActivated()){
     var tb0 = document.getElementById('tabbar'); if(tb0) tb0.classList.remove('hidden');
+    loadGroup();
     loadBank();
     render();
     updateCloudSub();
     checkVersionAndMaybeSync(true);
     show('home');
+    ensureGroup();
   }else{
     show('activate');
   }
