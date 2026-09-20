@@ -383,12 +383,12 @@
     display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border:1px solid var(--line-strong);
     border-radius:4px;background:var(--paper);margin-bottom:8px;font-size:15px;line-height:1.5;
   }
-  .display-option.revealed-correct{background:var(--correct-bg);border-color:var(--correct);}
+  .display-option.revealed-correct{background:#1F5A3A;border-color:#1F5A3A;color:#fff;font-weight:700;}
   .display-answer-box{
     padding:12px 14px;border-radius:4px;background:var(--paper);border:1px solid var(--line-strong);
     font-size:15px;color:var(--ink-soft);
   }
-  .display-answer-box.revealed{background:var(--correct-bg);border-color:var(--correct);color:var(--correct);font-weight:700;}
+  .display-answer-box.revealed{background:#1F5A3A;border-color:#1F5A3A;color:#fff;font-weight:700;}
   .display-hint{font-size:20px;font-weight:700;color:var(--ink-soft);text-align:center;margin:14px 0 24px;}
   .display-plain-item{padding:0;margin-bottom:4px;}
   .guide-card{
@@ -1123,6 +1123,25 @@
     return a;
   }
 
+  // 練習時隨機打亂選項順序：回傳複製品（不改動題庫原本的題目），並同步換算正確答案的位置
+  // 選項或題目文字裡若出現「以上皆是」「A、B」這類依賴選項順序的說法，就不打亂
+  var ORDER_DEPENDENT = /以上|以下|上述|皆是|皆非|皆對|皆錯|皆正確|皆不|均是|均非|均不|[（(]\s*[A-Ha-h1-8]\s*[）)]|[A-H1-8]\s*[、,，和及與]\s*[A-H1-8]|(?:^|[^A-Za-z])[A-H]\s*[、,，]\s*[A-H]/;
+  function shuffleOptions(q){
+    if(!q || q.type === 'fill' || !Array.isArray(q.options) || q.options.length < 2) return q;
+    if(ORDER_DEPENDENT.test(q.options.join('\n')) || ORDER_DEPENDENT.test(q.text || '')) return q;
+    var oldAns = answerList(q);
+    var perm = q.options.map(function(_, i){ return i; });
+    perm = shuffle(perm);
+    var c = {};
+    for(var k in q) if(Object.prototype.hasOwnProperty.call(q, k)) c[k] = q[k];
+    c.options = perm.map(function(oi){ return q.options[oi]; });
+    var newAns = [];
+    perm.forEach(function(oi, ni){ if(oldAns.indexOf(oi) !== -1) newAns.push(ni); });
+    c.answerIndexes = newAns;
+    c.answerIndex = newAns.length ? newAns[0] : -1;
+    return c;
+  }
+
   function startQuiz(pool){
     var list;
     if(pool === 'wrong'){
@@ -1133,7 +1152,7 @@
       list = filterByCategory(state.questions.slice());
     }
     if(list.length === 0) return;
-    quiz = { order: shuffle(list), idx: 0, answers: {}, correctCount: 0, pool: pool };
+    quiz = { order: shuffle(list).map(shuffleOptions), idx: 0, answers: {}, correctCount: 0, pool: pool };
     show('quiz');
     renderQuestion();
   }
@@ -1258,7 +1277,7 @@
   function buildAnswerHtml(q, revealed, plain){
     if(q.type === 'fill'){
       if(revealed){
-        if(plain) return '<div style="color:#16305C;font-weight:700;font-size:17px;">答案：' + renderTextWithImages(q.answerText) + '</div>';
+        if(plain) return '<div style="background:#1F5A3A;color:#fff;font-weight:700;font-size:17px;padding:4px 10px;border-radius:4px;">答案：' + renderTextWithImages(q.answerText) + '</div>';
         return '<div class="display-answer-box revealed">答案：' + renderTextWithImages(q.answerText) + '</div>';
       }
       if(plain) return '<div style="color:var(--ink-soft);">（尚未顯示答案）</div>';
@@ -1267,7 +1286,7 @@
     return q.options.map(function(opt, i){
       var isCorrect = revealed && isAnsIdx(q, i);
       if(plain){
-        var style = isCorrect ? 'color:#16305C;font-weight:700;text-decoration:underline;' : '';
+        var style = isCorrect ? 'background:#1F5A3A;color:#fff;font-weight:700;padding:4px 10px;border-radius:4px;' : '';
         return '<div style="' + style + 'margin-bottom:4px;font-size:17px;">(' + optionLabel(q, i) + ') ' + renderTextWithImages(opt) + '</div>';
       }
       var cls = 'display-option' + (isCorrect ? ' revealed-correct' : '');
@@ -1462,8 +1481,17 @@
         var metaText = q.type === 'fill'
           ? ('你的答案「' + escapeHtml(quiz.answers[i] || '') + '」　正確答案「' + renderTextWithImages(q.answerText) + '」')
           : ('你的答案 ' + optionLabel(q, quiz.answers[i]) + '　正確答案 ' + answerLabelText(q));
-        row.innerHTML = '<div><div class="qtext">' + escapeHtml(q.text) + '</div>' +
-          '<div class="qmeta">' + metaText + '</div></div>';
+        var optsHtml = '';
+        if(q.type !== 'fill' && Array.isArray(q.options)){
+          optsHtml = '<div style="margin-top:8px;">' + q.options.map(function(o, oi){
+            var right = isAnsIdx(q, oi), mine = (oi === quiz.answers[i]);
+            var st = right ? 'color:#1f7a3a;font-weight:700;' : (mine ? 'color:#a11;text-decoration:line-through;' : '');
+            var mark = right ? ' ✓' : (mine ? ' ✗' : '');
+            return '<div style="margin:4px 0;' + st + '">(' + optionLabel(q, oi) + ') ' + renderTextWithImages(o) + mark + '</div>';
+          }).join('') + '</div>';
+        }
+        row.innerHTML = '<div style="width:100%"><div class="qtext"><b>第 ' + (i + 1) + ' 題</b>　' + renderTextWithImages(q.text) + '</div>' +
+          optsHtml + '<div class="qmeta">' + metaText + '</div></div>';
         wrongList.appendChild(row);
       });
     }
