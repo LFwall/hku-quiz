@@ -894,6 +894,19 @@
     }catch(e){}
   }
 
+  // 這台裝置的隨機識別碼（第一次使用時產生，後端用它限制每組序號可用的裝置數）
+  function getDeviceId(){
+    try{
+      var id = localStorage.getItem('quizAppDeviceId');
+      if(!id){
+        id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+          : ('d' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
+        localStorage.setItem('quizAppDeviceId', id);
+      }
+      return id;
+    }catch(e){ return 'nostorage'; }
+  }
+
   function getDeviceToken(){
     try{ return localStorage.getItem(LS_TOKEN) || ''; }catch(e){ return ''; }
   }
@@ -996,7 +1009,7 @@
     if(!token) return;
     var msg = document.getElementById('syncMsg');
     if(!silent && msg){ msg.className = 'msg show ok'; msg.textContent = '同步中…'; }
-    fetch(ACTIVATION_ENDPOINT + '?action=questions&token=' + encodeURIComponent(token))
+    fetch(ACTIVATION_ENDPOINT + '?action=questions&token=' + encodeURIComponent(token) + '&device=' + encodeURIComponent(getDeviceId()))
       .then(function(res){ return res.json(); })
       .then(function(data){
         if(data && data.success && Array.isArray(data.questions)){
@@ -1024,7 +1037,7 @@
           if(!silent && msg){ msg.className = 'msg show ok'; msg.textContent = '已同步 ' + cloudQs.length + ' 題雲端題目'; }
         }else{
           var reason = data && data.reason;
-          var text = reason === 'unauthorized' ? '通行證無效，請重新輸入序號啟用' : '同步失敗，雲端題庫回應異常';
+          var text = reason === 'unauthorized' ? '通行證無效，或這組序號已超過可使用的裝置數量，請聯絡發放序號的人' : '同步失敗，雲端題庫回應異常';
           if(!silent && msg){ msg.className = 'msg show err'; msg.textContent = text; }
         }
       })
@@ -1038,7 +1051,7 @@
     var token = getDeviceToken();
     if(!token) return;
     var msg = document.getElementById('syncMsg');
-    fetch(ACTIVATION_ENDPOINT + '?action=version&token=' + encodeURIComponent(token))
+    fetch(ACTIVATION_ENDPOINT + '?action=version&token=' + encodeURIComponent(token) + '&device=' + encodeURIComponent(getDeviceId()))
       .then(function(res){ return res.json(); })
       .then(function(data){
         if(!(data && data.success)){
@@ -1079,7 +1092,7 @@
     }
     loading.classList.add('show');
     document.getElementById('actBtn').disabled = true;
-    fetch(ACTIVATION_ENDPOINT + '?code=' + encodeURIComponent(code))
+    fetch(ACTIVATION_ENDPOINT + '?code=' + encodeURIComponent(code) + '&device=' + encodeURIComponent(getDeviceId()))
       .then(function(res){ return res.json(); })
       .then(function(data){
         loading.classList.remove('show');
@@ -1097,6 +1110,7 @@
         }else{
           var reason = data && data.reason;
           if(reason === 'used'){ err.textContent = '這組序號已經被使用過了。'; }
+          else if(reason === 'device_limit'){ err.textContent = '這組序號已達到可使用的裝置數量上限，請聯絡發放序號的人。'; }
           else if(reason === 'missing'){ err.textContent = '請輸入序號。'; }
           else{ err.textContent = '序號不正確，請確認後再輸入一次。'; }
           err.classList.add('show');
