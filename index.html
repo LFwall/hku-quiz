@@ -599,8 +599,6 @@
           </div>
           <div class="score-hand-wrap" id="scoreHandWrap">
             <div class="score-hand" id="resultScoreHand">0</div>
-            <div class="score-underline score-underline-1"></div>
-            <div class="score-underline score-underline-2"></div>
           </div>
         </div>
       </div>
@@ -1291,7 +1289,7 @@
   function buildAnswerHtml(q, revealed, plain){
     if(q.type === 'fill'){
       if(revealed){
-        if(plain) return '<div style="background:#1F5A3A;color:#fff;font-weight:700;font-size:17px;padding:4px 10px;border-radius:4px;">答案：' + renderTextWithImages(q.answerText) + '</div>';
+        if(plain) return '<div style="color:#16305C;font-weight:700;font-size:17px;">答案：' + renderTextWithImages(q.answerText) + '</div>';
         return '<div class="display-answer-box revealed">答案：' + renderTextWithImages(q.answerText) + '</div>';
       }
       if(plain) return '<div style="color:var(--ink-soft);">（尚未顯示答案）</div>';
@@ -1300,7 +1298,7 @@
     return q.options.map(function(opt, i){
       var isCorrect = revealed && isAnsIdx(q, i);
       if(plain){
-        var style = isCorrect ? 'background:#1F5A3A;color:#fff;font-weight:700;padding:4px 10px;border-radius:4px;' : '';
+        var style = isCorrect ? 'color:#16305C;font-weight:700;text-decoration:underline;' : '';
         return '<div style="' + style + 'margin-bottom:4px;font-size:17px;">(' + optionLabel(q, i) + ') ' + renderTextWithImages(opt) + '</div>';
       }
       var cls = 'display-option' + (isCorrect ? ' revealed-correct' : '');
