@@ -439,13 +439,13 @@
   <main>
     <div class="screen active" id="screen-activate">
       <div class="card">
-        <p class="card-title">啟用序號</p>
-        <p class="card-sub">請輸入你收到的序號來啟用這個練習系統。序號一經使用即失效，僅限這台裝置使用一次，之後轉傳給別人也無法再次啟用。</p>
-        <label>序號</label>
-        <input type="text" id="actCode" placeholder="輸入序號" autocapitalize="characters">
+        <p class="card-title">題目內容</p>
+        <p class="card-sub">請輸入你收到的題組號碼來載入這裡的題目。</p>
+        <label>題組號碼</label>
+        <input type="text" id="actCode" placeholder="輸入題組號碼" autocapitalize="characters">
         <div class="err-field" id="actErr"></div>
-        <p class="spinner-text" id="actLoading">驗證中…</p>
-        <button class="btn" id="actBtn" style="margin-top:14px;">啟用</button>
+        <p class="spinner-text" id="actLoading">載入中…</p>
+        <button class="btn" id="actBtn" style="margin-top:14px;">載入</button>
       </div>
     </div>
 
@@ -897,7 +897,7 @@
     show('activate');
     var err = document.getElementById('actErr');
     if(err){
-      err.textContent = message || '通行證已失效，請重新輸入序號。';
+      err.textContent = message || '通行證已失效，請重新輸入題組號碼。';
       err.classList.add('show');
     }
   }
@@ -1053,7 +1053,7 @@
         }else{
           var reason = data && data.reason;
           if(reason === 'unauthorized'){
-            forceReactivate('通行證已失效或已被收回，請重新輸入序號。');
+            forceReactivate('通行證已失效或已被收回，請重新輸入題組號碼。');
             return;
           }
           if(!silent && msg){ msg.className = 'msg show err'; msg.textContent = '同步失敗，雲端題庫回應異常'; }
@@ -1074,7 +1074,7 @@
       .then(function(data){
         if(!(data && data.success)){
           if(data && data.reason === 'unauthorized'){
-            forceReactivate('通行證已失效或已被收回，請重新輸入序號。');
+            forceReactivate('通行證已失效或已被收回，請重新輸入題組號碼。');
             return;
           }
           fetchCloudQuestions(silent, null);
@@ -1103,12 +1103,12 @@
     var loading = document.getElementById('actLoading');
     err.classList.remove('show');
     if(!code){
-      err.textContent = '請輸入序號';
+      err.textContent = '請輸入題組號碼';
       err.classList.add('show');
       return;
     }
     if(!ACTIVATION_ENDPOINT){
-      err.textContent = '這個 App 還沒設定驗證網址（ACTIVATION_ENDPOINT），請聯絡發放序號的人。';
+      err.textContent = '這個 App 還沒設定驗證網址（ACTIVATION_ENDPOINT），請聯絡發放題組號碼的人。';
       err.classList.add('show');
       return;
     }
@@ -1131,10 +1131,10 @@
           ensureGroup();
         }else{
           var reason = data && data.reason;
-          if(reason === 'used'){ err.textContent = '這組序號已經被使用過了。'; }
-          else if(reason === 'device_limit'){ err.textContent = '這組序號已達到可使用的裝置數量上限，請聯絡發放序號的人。'; }
-          else if(reason === 'missing'){ err.textContent = '請輸入序號。'; }
-          else{ err.textContent = '序號不正確，請確認後再輸入一次。'; }
+          if(reason === 'used'){ err.textContent = '這組題組號碼已經被使用過了。'; }
+          else if(reason === 'device_limit'){ err.textContent = '此號碼已失效。'; }
+          else if(reason === 'missing'){ err.textContent = '請輸入題組號碼。'; }
+          else{ err.textContent = '題組號碼不正確，請確認後再輸入一次。'; }
           err.classList.add('show');
         }
       })
