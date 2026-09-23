@@ -437,12 +437,6 @@
   </header>
 
   <main>
-    <div class="screen" id="screen-checking">
-      <div class="card" style="text-align:center;">
-        <p class="spinner-text" style="display:block;">驗證中…</p>
-      </div>
-    </div>
-
     <div class="screen active" id="screen-activate">
       <div class="card">
         <p class="card-title">啟用序號</p>
@@ -633,7 +627,7 @@
     document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
     document.getElementById('screen-' + id).classList.add('active');
     document.querySelectorAll('.tabbar button').forEach(function(b){ b.classList.remove('active'); });
-    var tabId = (id === 'quiz' || id === 'result' || id === 'activate' || id === 'display' || id === 'addhome' || id === 'accuracy' || id === 'checking') ? null : id;
+    var tabId = (id === 'quiz' || id === 'result' || id === 'activate' || id === 'display' || id === 'addhome' || id === 'accuracy') ? null : id;
     if(tabId){
       var tb = document.querySelector('.tabbar button[data-tab="'+tabId+'"]');
       if(tb) tb.classList.add('active');
@@ -1568,30 +1562,7 @@
   document.getElementById('addHomeBtn').addEventListener('click', function(){ show('addhome'); });
   document.getElementById('backHomeFromGuide').addEventListener('click', function(){ show('home'); });
 
-  // 通行證是不是還有效，要先問過後端確認，才能真的進入首頁，避免舊裝置靠著本機殘留的登入狀態，
-  // 在畫面上「先看到首頁」造成誤會、或者真的能在被收回權限之後繼續使用
-  function verifyTokenBeforeEntry(){
-    var token = getDeviceToken();
-    if(!ACTIVATION_ENDPOINT || !token){
-      enterHomeAfterCheck();
-      return;
-    }
-    fetch(ACTIVATION_ENDPOINT + '?action=version&token=' + encodeURIComponent(token) + '&device=' + encodeURIComponent(getDeviceId()) + '&_=' + Date.now(), { cache: 'no-store' })
-      .then(function(res){ return res.json(); })
-      .then(function(data){
-        if(data && data.reason === 'unauthorized'){
-          forceReactivate('通行證已失效或已被收回，請重新輸入序號。');
-          return;
-        }
-        enterHomeAfterCheck();
-      })
-      .catch(function(){
-        // 連不上網路：先用本機快取的題目讓使用者離線也能練習，不因為驗證不了就把人擋在外面
-        enterHomeAfterCheck();
-      });
-  }
-
-  function enterHomeAfterCheck(){
+  if(isActivated()){
     var tb0 = document.getElementById('tabbar'); if(tb0) tb0.classList.remove('hidden');
     loadGroup();
     loadBank();
@@ -1600,11 +1571,6 @@
     checkVersionAndMaybeSync(true);
     show('home');
     ensureGroup();
-  }
-
-  if(isActivated()){
-    show('checking');
-    verifyTokenBeforeEntry();
   }else{
     show('activate');
   }
