@@ -1018,6 +1018,29 @@
     }catch(e){}
   }
 
+  // 把後端回傳的雲端題目套用到本機題庫（新增/更新用），共用在「一般同步」跟「剛啟用就直接拿到題目」兩個地方
+  function applyCloudQuestions(rawQuestions, version){
+    var cloudQs = rawQuestions.map(function(q){
+      var base = { id: 'cloud_' + q.id, text: q.text, type: q.type || 'choice', source: 'cloud', category: q.category || '未分類', group: q.group || '弘光考試' };
+      if(base.type === 'fill'){
+        base.answerText = q.answerText;
+      }else{
+        base.options = q.options;
+        base.answerIndex = q.answerIndex;
+        base.answerIndexes = Array.isArray(q.answerIndexes) && q.answerIndexes.length ? q.answerIndexes : [q.answerIndex];
+        base.optionStyle = q.optionStyle || 'letter';
+      }
+      return base;
+    });
+    state.questions = state.questions.filter(function(q){ return q.source !== 'cloud'; }).concat(cloudQs);
+    try{ localStorage.setItem(LS_LAST_SYNC, new Date().toLocaleString('zh-TW')); }catch(e){}
+    if(version !== undefined && version !== null){
+      try{ localStorage.setItem(LS_QUESTION_VERSION, String(version)); }catch(e){}
+    }
+    saveBank();
+    return cloudQs.length;
+  }
+
   function fetchCloudQuestions(silent, newVersion){
     if(!ACTIVATION_ENDPOINT) return;
     var token = getDeviceToken();
@@ -1028,28 +1051,11 @@
       .then(function(res){ return res.json(); })
       .then(function(data){
         if(data && data.success && Array.isArray(data.questions)){
-          var cloudQs = data.questions.map(function(q){
-            var base = { id: 'cloud_' + q.id, text: q.text, type: q.type || 'choice', source: 'cloud', category: q.category || '未分類', group: q.group || '弘光考試' };
-            if(base.type === 'fill'){
-              base.answerText = q.answerText;
-            }else{
-              base.options = q.options;
-              base.answerIndex = q.answerIndex;
-              base.answerIndexes = Array.isArray(q.answerIndexes) && q.answerIndexes.length ? q.answerIndexes : [q.answerIndex];
-              base.optionStyle = q.optionStyle || 'letter';
-            }
-            return base;
-          });
-          state.questions = state.questions.filter(function(q){ return q.source !== 'cloud'; }).concat(cloudQs);
-          try{ localStorage.setItem(LS_LAST_SYNC, new Date().toLocaleString('zh-TW')); }catch(e){}
-          if(newVersion !== undefined && newVersion !== null){
-            try{ localStorage.setItem(LS_QUESTION_VERSION, String(newVersion)); }catch(e){}
-          }
-          saveBank();
+          var count = applyCloudQuestions(data.questions, newVersion);
           render();
           ensureGroup();
           updateCloudSub();
-          if(!silent && msg){ msg.className = 'msg show ok'; msg.textContent = '已同步 ' + cloudQs.length + ' 題雲端題目'; }
+          if(!silent && msg){ msg.className = 'msg show ok'; msg.textContent = '已同步 ' + count + ' 題雲端題目'; }
         }else{
           var reason = data && data.reason;
           if(reason === 'unauthorized'){
@@ -1124,6 +1130,11 @@
           var tb0 = document.getElementById('tabbar'); if(tb0) tb0.classList.remove('hidden');
           loadGroup();
           loadBank();
+          // 啟用成功時，如果後端已經直接把題目一起帶回來了，就不用再多一趟「先問版本、再要題目」的來回，
+          // 首頁一開始顯示的就是正確的題數，不會先看到 0 題再跳成正確數字
+          if(Array.isArray(data.questions)){
+            applyCloudQuestions(data.questions, data.version);
+          }
           render();
           updateCloudSub();
           checkVersionAndMaybeSync(true);
