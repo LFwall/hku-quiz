@@ -885,6 +885,23 @@
     try{ return localStorage.getItem(LS_ACTIVATED) === '1'; }catch(e){ return false; }
   }
 
+  // 通行證被後端判定失效時（例如管理者換掉了直接通行序號、或序號被收回），
+  // 清掉本機的啟用狀態，讓使用者回到輸入序號畫面，而不是留在一個看似能用、其實同步不了的狀態
+  function forceReactivate(message){
+    try{
+      localStorage.removeItem(LS_ACTIVATED);
+      localStorage.removeItem(LS_TOKEN);
+    }catch(e){}
+    var tb = document.getElementById('tabbar');
+    if(tb) tb.classList.add('hidden');
+    show('activate');
+    var err = document.getElementById('actErr');
+    if(err){
+      err.textContent = message || '通行證已失效，請重新輸入序號。';
+      err.classList.add('show');
+    }
+  }
+
   function markActivated(token){
     try{
       localStorage.setItem(LS_ACTIVATED, '1');
@@ -1007,7 +1024,7 @@
     if(!token) return;
     var msg = document.getElementById('syncMsg');
     if(!silent && msg){ msg.className = 'msg show ok'; msg.textContent = '同步中…'; }
-    fetch(ACTIVATION_ENDPOINT + '?action=questions&token=' + encodeURIComponent(token) + '&device=' + encodeURIComponent(getDeviceId()))
+    fetch(ACTIVATION_ENDPOINT + '?action=questions&token=' + encodeURIComponent(token) + '&device=' + encodeURIComponent(getDeviceId()) + '&_=' + Date.now(), { cache: 'no-store' })
       .then(function(res){ return res.json(); })
       .then(function(data){
         if(data && data.success && Array.isArray(data.questions)){
@@ -1035,8 +1052,11 @@
           if(!silent && msg){ msg.className = 'msg show ok'; msg.textContent = '已同步 ' + cloudQs.length + ' 題雲端題目'; }
         }else{
           var reason = data && data.reason;
-          var text = reason === 'unauthorized' ? '通行證無效，或這組序號已超過可使用的裝置數量，請聯絡發放序號的人' : '同步失敗，雲端題庫回應異常';
-          if(!silent && msg){ msg.className = 'msg show err'; msg.textContent = text; }
+          if(reason === 'unauthorized'){
+            forceReactivate('通行證已失效或已被收回，請重新輸入序號。');
+            return;
+          }
+          if(!silent && msg){ msg.className = 'msg show err'; msg.textContent = '同步失敗，雲端題庫回應異常'; }
         }
       })
       .catch(function(){
@@ -1049,10 +1069,14 @@
     var token = getDeviceToken();
     if(!token) return;
     var msg = document.getElementById('syncMsg');
-    fetch(ACTIVATION_ENDPOINT + '?action=version&token=' + encodeURIComponent(token) + '&device=' + encodeURIComponent(getDeviceId()))
+    fetch(ACTIVATION_ENDPOINT + '?action=version&token=' + encodeURIComponent(token) + '&device=' + encodeURIComponent(getDeviceId()) + '&_=' + Date.now(), { cache: 'no-store' })
       .then(function(res){ return res.json(); })
       .then(function(data){
         if(!(data && data.success)){
+          if(data && data.reason === 'unauthorized'){
+            forceReactivate('通行證已失效或已被收回，請重新輸入序號。');
+            return;
+          }
           fetchCloudQuestions(silent, null);
           return;
         }
@@ -1090,7 +1114,7 @@
     }
     loading.classList.add('show');
     document.getElementById('actBtn').disabled = true;
-    fetch(ACTIVATION_ENDPOINT + '?code=' + encodeURIComponent(code) + '&device=' + encodeURIComponent(getDeviceId()))
+    fetch(ACTIVATION_ENDPOINT + '?code=' + encodeURIComponent(code) + '&device=' + encodeURIComponent(getDeviceId()) + '&_=' + Date.now(), { cache: 'no-store' })
       .then(function(res){ return res.json(); })
       .then(function(data){
         loading.classList.remove('show');
