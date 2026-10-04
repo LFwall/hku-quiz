@@ -502,7 +502,7 @@
     <div class="screen" id="screen-addhome">
       <div class="card">
         <p class="card-title">加入主畫面</p>
-        <p class="card-sub">加入主畫面後，之後直接點桌面圖示打開，不用再重複這幾個步驟。請直接在這個頁面照下面的步驟操作，加入後從桌面圖示打開就不需要再輸入題組號碼。</p>
+        <p class="card-sub">加入主畫面後，之後直接點桌面圖示打開，不用再重複這幾個步驟。加入後從桌面圖示打開，不需要再輸入題組號碼。</p>
       </div>
 
       <div class="guide-card">
@@ -614,22 +614,7 @@
 
   function uid(){ return 'q' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
-  // iOS「加入主畫面」會把當下網址存成桌面圖示的開啟網址，但圖示 App 的儲存空間跟 Safari 是分開的。
-  // 所以只在「加入主畫面教學」這個畫面，把通行證跟裝置識別碼暫時放在網址 # 後面（# 後面的內容不會送到伺服器），
-  // 桌面圖示第一次打開時讀進自己的儲存空間並立刻從網址上清掉；離開教學畫面時也會馬上清掉，避免使用者複製網址時連登入資訊一起傳出去
-  function syncHandoffHash(id){
-    try{
-      var clean = location.pathname + location.search;
-      if(id === 'addhome' && window.navigator.standalone !== true && isActivated() && getDeviceToken()){
-        history.replaceState(null, '', clean + '#t=' + encodeURIComponent(getDeviceToken()) + '&d=' + encodeURIComponent(getDeviceId()));
-      }else if(location.hash){
-        history.replaceState(null, '', clean);
-      }
-    }catch(e){}
-  }
-
   function show(id){
-    syncHandoffHash(id);
     document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
     document.getElementById('screen-' + id).classList.add('active');
     document.querySelectorAll('.tabbar button').forEach(function(b){ b.classList.remove('active'); });
@@ -898,6 +883,7 @@
       localStorage.removeItem(LS_ACTIVATED);
       localStorage.removeItem(LS_TOKEN);
     }catch(e){}
+    try{ history.replaceState(null, '', location.pathname + location.search); }catch(e){}
     var tb = document.getElementById('tabbar');
     if(tb) tb.classList.add('hidden');
     show('activate');
@@ -1146,6 +1132,7 @@
           checkVersionAndMaybeSync(true);
           show('home');
           ensureGroup();
+          requestHandoffTicket();
         }else{
           var reason = data && data.reason;
           if(reason === 'used'){ err.textContent = '這組題組號碼已經被使用過了。'; }
@@ -1579,34 +1566,61 @@
   document.getElementById('addHomeBtn').addEventListener('click', function(){ show('addhome'); });
   document.getElementById('backHomeFromGuide').addEventListener('click', function(){ show('home'); });
 
-  // 從桌面圖示第一次打開時，如果網址帶有 Safari 交接過來的通行證與裝置識別碼，且這個 App 還沒啟用過，
-  // 就直接沿用（同一個裝置識別碼，後端會當成同一台裝置，不會多佔名額），然後把網址上的資訊清掉
-  (function importHandoff(){
-    var h = location.hash || '';
-    var tm = h.match(/[#&]t=([^&]+)/), dm = h.match(/[#&]d=([^&]+)/);
-    if(!tm || !dm) return;
-    try{
-      var tok = decodeURIComponent(tm[1]), dev = decodeURIComponent(dm[1]);
-      if(!isActivated() && /^[A-Za-z0-9-]{8,64}$/.test(tok) && /^[A-Za-z0-9-]{8,64}$/.test(dev)){
-        localStorage.setItem('quizAppDeviceId', dev);
-        markActivated(tok);
-      }
-    }catch(e){}
-    try{ history.replaceState(null, '', location.pathname + location.search); }catch(e){}
-  })();
-
-  if(isActivated()){
-    var tb0 = document.getElementById('tabbar'); if(tb0) tb0.classList.remove('hidden');
-    loadGroup();
-    loadBank();
-    render();
-    updateCloudSub();
-    checkVersionAndMaybeSync(true);
-    show('home');
-    ensureGroup();
-  }else{
-    show('activate');
+  // ---------- 從 Safari 交接登入狀態到桌面圖示 ----------
+  // iOS 的桌面圖示 App 跟 Safari 儲存空間是分開的，而「加入主畫面」會把當下的網址存起來當作圖示的開啟網址。
+  // 所以在 Safari 裡（已啟用、任何畫面），網址 # 後面都會掛一張後端發的「一次性交接票」；
+  // 桌面圖示第一次打開時拿票向後端換回通行證與裝置識別碼（同一個裝置識別碼，不會多佔名額），票換過就作廢
+  var TICKET_RE = /^[A-Za-z0-9]{16,128}$/;
+  function requestHandoffTicket(){
+    if(!ACTIVATION_ENDPOINT || isStandaloneMode || !isActivated()) return;
+    fetch(ACTIVATION_ENDPOINT + '?action=ticket&token=' + encodeURIComponent(getDeviceToken()) + '&device=' + encodeURIComponent(getDeviceId()) + '&_=' + Date.now(), { cache: 'no-store' })
+      .then(function(res){ return res.json(); })
+      .then(function(d){
+        if(d && d.success && TICKET_RE.test(d.ticket || '') && isActivated()){
+          try{ history.replaceState(null, '', location.pathname + location.search + '#k=' + d.ticket); }catch(e){}
+        }
+      })
+      .catch(function(){});
   }
+
+  function startApp(){
+    if(isActivated()){
+      var tb0 = document.getElementById('tabbar'); if(tb0) tb0.classList.remove('hidden');
+      loadGroup();
+      loadBank();
+      render();
+      updateCloudSub();
+      checkVersionAndMaybeSync(true);
+      show('home');
+      ensureGroup();
+      requestHandoffTicket();
+    }else{
+      show('activate');
+    }
+  }
+
+  (function boot(){
+    var km = (location.hash || '').match(/[#&]k=([A-Za-z0-9]+)/);
+    if(km){ try{ history.replaceState(null, '', location.pathname + location.search); }catch(e){} }
+    // 只有「從桌面圖示打開」而且這個 App 還沒啟用過，才會拿票來換；在一般瀏覽器開到帶票的網址不會被換走
+    if(km && isStandaloneMode && !isActivated() && ACTIVATION_ENDPOINT && TICKET_RE.test(km[1])){
+      show('activate');
+      var loading = document.getElementById('actLoading');
+      loading.classList.add('show');
+      fetch(ACTIVATION_ENDPOINT + '?action=redeem&ticket=' + encodeURIComponent(km[1]) + '&_=' + Date.now(), { cache: 'no-store' })
+        .then(function(res){ return res.json(); })
+        .then(function(d){
+          if(d && d.success && d.token && /^[A-Za-z0-9-]{8,64}$/.test(d.device || '')){
+            try{ localStorage.setItem('quizAppDeviceId', d.device); }catch(e){}
+            markActivated(d.token);
+          }
+        })
+        .catch(function(){})
+        .then(function(){ loading.classList.remove('show'); startApp(); });
+    }else{
+      startApp();
+    }
+  })();
 })();
 </script>
 </body>
