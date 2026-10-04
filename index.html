@@ -1613,6 +1613,10 @@
           if(d && d.success && d.token && /^[A-Za-z0-9-]{8,64}$/.test(d.device || '')){
             try{ localStorage.setItem('quizAppDeviceId', d.device); }catch(e){}
             markActivated(d.token);
+            // 題目跟著交接一起帶回來，先存好再進首頁，進去時就已經有題目，不會先看到 0 題再等同步
+            if(Array.isArray(d.questions)){
+              try{ applyCloudQuestions(d.questions, d.version); }catch(e){}
+            }
           }
         })
         .catch(function(){})
